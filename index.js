@@ -4,7 +4,10 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const Stock=require('./models/Stock');
+const Transaction=require('./models/Transaction');
 const stockController = require('./controller/stockController');
+const {DataTypes} = require("sequelize");
+const {response} = require("express");
 require('dotenv').config(); // Load environment variables
 
 const app = express();
@@ -30,7 +33,7 @@ io.on('connection', (socket) => {
 
     socket.on('stock_change', async (msg) => {
         try {
-            console.log('stock_change: ' + msg['quantity']+" "+msg['stock_code']+" "+msg['stock_id']);
+            console.log('\n\nstock_change: ' + msg['quantity']+" "+msg['stock_code']+" "+msg['stock_id']+" "+msg['stock_company_name']);
             const stock=await Stock.findOne({
                 where:{
                     stock_id:msg['stock_id']
@@ -41,7 +44,24 @@ io.on('connection', (socket) => {
             stock.stock_price=newPrice;
             stock.stock_quantity_left=stock.stock_quantity_left-msg['quantity'];
             await stock.save();
-            console.log("changed value : ",stock);
+
+            const newTransaction=Transaction.build({
+                transaction_type:'BUY',
+                transaction_amount:newPrice,
+                transaction_time:new Date().toTimeString().split(' ')[0],
+                stock_id:msg['stock_id'],
+                stock_company_name:msg['stock_company_name'],
+                stock_company_code:msg['stock_code'],
+
+                transaction_date: new Date().toISOString().split('T')[0]
+            });
+            console.log(newTransaction);
+            await newTransaction.save().then((response)=>{
+                console.log("\n\n"+response);
+            }).catch((err)=>{
+                console.log('\n\n'+err);
+            });
+
             io.emit('stock_inc',{stock:stock});
         } catch (error) {
             console.error('Error handling stock_change:', error);
@@ -61,6 +81,24 @@ io.on('connection', (socket) => {
             stock.stock_price=newPrice;
             stock.stock_quantity_left=parseInt(stock.stock_quantity_left)+parseInt(data['quantity']);
             await stock.save();
+
+            const newTransaction=Transaction.build({
+                transaction_type:'SELL',
+                transaction_amount:newPrice,
+                transaction_time:new Date().toTimeString().split(' ')[0],
+                stock_id:data['stock_id'],
+                stock_company_name:data['stock_company_name'],
+                stock_company_code:data['stock_code'],
+
+                transaction_date: new Date().toISOString().split('T')[0]
+            });
+            console.log(newTransaction);
+            await newTransaction.save().then((response)=>{
+                console.log("\n\n"+response);
+            }).catch((err)=>{
+                console.log('\n\n'+err);
+            });
+
             io.emit('stock_sell',{stock:stock});
         } catch (err){
             console.error(err);
